@@ -1,0 +1,17 @@
+# Python generic
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+env/
+
+# IDE settings
+.vscode/
+.idea/
+
+# Data files (اگر دیتای csv خیلی حجیم دارید اینجا اضافه کنید)
+# *.csv
+
+# Logs (اختیاری: اگر می‌خواهید لاگ‌ها آپلود شوند این خط را نگذارید)
+# logs/
