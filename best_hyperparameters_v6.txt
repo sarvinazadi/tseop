@@ -1,0 +1,1 @@
+{'learning_rate': 0.00010010429449913118, 'gamma': 0.9850740145072168, 'gae_lambda': 0.9409478201585882, 'ent_coef': 1.819821976503584e-05, 'batch_size': 64, 'n_steps': 1024, 'net_arch': 'large'}

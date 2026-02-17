@@ -1,3 +1,4 @@
+#validate_genius.py
 import pandas as pd
 import pytse_client as tse
 import matplotlib.pyplot as plt
@@ -11,8 +12,8 @@ import os
 # تنظیمات
 # ==========================================
 # تغییر نام مدل به نسخه نهایی ۶ بتا
-MODEL_PATH = "TSE_Genius_Agent_v6_beta.zip" 
-START_DATE_TEST = "2024-01-01"
+MODEL_PATH = "TSE_Genius_Agent_v6_TUNED.zip" 
+START_DATE_TEST = "2023-01-01"
 
 # لیست نمادها (دقیقاً طبق دستور شما بدون تغییر)
 TICKERS = ["فولاد", "خودرو", "شپنا", "شستا", "وبملت", "فارس", "رمپنا"]
