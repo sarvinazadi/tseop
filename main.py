@@ -180,7 +180,7 @@ def main():
 # ==========================================
 
 # 1. ذخیره خود مدل (مغز ایجنت)
-    model_name = "TSE_Genius_Agent_v5"
+    model_name = "TSE_Genius_Agent_v6_beta"
     model.save(model_name)
     print(f"✅ Model saved successfully as: {model_name}.zip")
 

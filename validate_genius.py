@@ -2,17 +2,19 @@ import pandas as pd
 import pytse_client as tse
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
+# فرض بر این است که فایل tse_env.py (نسخه اصلاح شده V6) کنار این فایل است
 from tse_env import TSEPortfolioEnv
 import numpy as np
+import os
 
 # ==========================================
 # تنظیمات
 # ==========================================
-MODEL_PATH = "TSE_Genius_Agent_v5.zip"
-START_DATE_TEST = "2023-01-01"
+# تغییر نام مدل به نسخه نهایی ۶ بتا
+MODEL_PATH = "TSE_Genius_Agent_v6_beta.zip" 
+START_DATE_TEST = "2024-01-01"
 
-# لیست نمادها (دقیقاً 7 نماد که در آموزش بوده اند)
-# "وتجارت" حذف شد چون در آموزش نبوده است
+# لیست نمادها (دقیقاً طبق دستور شما بدون تغییر)
 TICKERS = ["فولاد", "خودرو", "شپنا", "شستا", "وبملت", "فارس", "رمپنا"]
 
 # نگاشت نام‌ها
@@ -27,7 +29,7 @@ ENG_TICKERS = [TICKER_MAP[t] for t in TICKERS]
 # 1. تابع ساخت دیتای 3 بعدی (TENSOR)
 # ==========================================
 def prepare_tensor_data():
-    print("📥 Downloading raw data...")
+    print(f"📥 Downloading raw data for: {TICKERS}")
     dfs = []
     
     # 1. دانلود و ادغام دیتافریم‌ها
@@ -38,21 +40,20 @@ def prepare_tensor_data():
             ticker_data = tse.download(symbols=symbol, adjust=True)
             df = ticker_data[symbol]
             
-            # نرمال‌سازی نام ستون‌ها
+            # نرمال‌سازی نام ستون‌ها (شامل Volume برای نسخه ۶)
             df = df[['date', 'open', 'high', 'low', 'close', 'volume']]
             df.columns = ['date', f'{eng_name}_open', f'{eng_name}_high', f'{eng_name}_low', f'{eng_name}_close', f'{eng_name}_volume']
             
             df['date'] = pd.to_datetime(df['date'])
             df = df.set_index('date')
             
-            # حذف داده‌های پرت احتمالی (قیمت صفر)
+            # حذف داده‌های پرت احتمالی (قیمت نزدیک صفر)
             df = df[df[f'{eng_name}_close'] > 10]
             
             dfs.append(df)
-            print(f"   ✅ {symbol} loaded.")
+            print(f"   ✅ {symbol} ({eng_name}) loaded.")
         except Exception as e:
             print(f"   ❌ Error loading {symbol}: {e}")
-            # اگر سهمی لود نشد، کل پروسه فیل می‌شود چون شکل تنسور به هم می‌ریزد
             exit()
 
     print("🔄 Merging and aligning data...")
@@ -74,8 +75,8 @@ def prepare_tensor_data():
 
     # 2. تبدیل به آرایه 3 بعدی (Time, Assets, Features)
     n_timesteps = len(test_df)
-    n_assets = len(ENG_TICKERS) # باید 7 باشد
-    n_features = 5 
+    n_assets = len(ENG_TICKERS) 
+    n_features = 5 # (Open, High, Low, Close, Volume)
     
     tensor_data = np.zeros((n_timesteps, n_assets, n_features))
     
@@ -85,7 +86,7 @@ def prepare_tensor_data():
             f'{eng_ticker}_open',
             f'{eng_ticker}_high',
             f'{eng_ticker}_low',
-            f'{eng_ticker}_close', # Index 3 (Important for Environment)
+            f'{eng_ticker}_close', 
             f'{eng_ticker}_volume'
         ]
         tensor_data[:, i, :] = test_df[cols].values
@@ -97,11 +98,15 @@ def prepare_tensor_data():
 # ==========================================
 
 if __name__ == "__main__":
+    if not os.path.exists(MODEL_PATH):
+        print(f"❌ Error: Model file '{MODEL_PATH}' not found inside the folder.")
+        exit()
+
     # الف) آماده‌سازی دیتا
     data_tensor, date_list = prepare_tensor_data()
 
     # ب) ساخت محیط
-    print("\n🛠 Initializing Environment (V5 - Quant Insight)...")
+    print("\n🛠 Initializing Environment (V6 Beta)...")
     try:
         env = TSEPortfolioEnv(
             data=data_tensor,   
@@ -118,8 +123,8 @@ if __name__ == "__main__":
     try:
         model = PPO.load(MODEL_PATH)
         print("✅ Model loaded successfully.")
-    except FileNotFoundError:
-        print(f"❌ Error: {MODEL_PATH} not found.")
+    except Exception as e:
+        print(f"❌ Error loading model: {e}")
         exit()
 
     # بررسی تطابق محیط و مدل
@@ -135,39 +140,46 @@ if __name__ == "__main__":
     cash_ratios = []
 
     while not done:
-        # پیش‌بینی اکشن
+        # پیش‌بینی اکشن (Deterministic برای حذف شانس و دیدن عملکرد واقعی)
         action, _states = model.predict(obs, deterministic=True)
         
         obs, reward, done, truncated, info = env.step(action)
         
         portfolio_values.append(info['portfolio_value'])
-        cash_ratios.append(info['cash_weight'])
+        
+        # هندل کردن دریافت وزن پول نقد
+        cash_w = info.get('cash_weight', 0)
+        cash_ratios.append(cash_w)
         
         if len(portfolio_values) % 50 == 0:
-            print(f"Day {len(portfolio_values)}: Value={info['portfolio_value']:,.0f} (Cash: {info['cash_weight']*100:.1f}%)")
+            roi_current = (info['portfolio_value'] - 100_000_000) / 100_000_000 * 100
+            print(f"Day {len(portfolio_values)}: Value={info['portfolio_value']:,.0f} (ROI: {roi_current:.1f}%) | Cash: {cash_w*100:.1f}%")
 
     # ه) نتایج نهایی
     final_val = info['portfolio_value']
-    initial_val = portfolio_values[0] if portfolio_values else 100_000_000
+    initial_val = 100_000_000 # مقدار اولیه پیش‌فرض در env
     roi = (final_val - initial_val) / initial_val * 100
 
     print("\n" + "="*50)
-    print(f"🏁 Final Portfolio Value: {final_val:,.0f} Tomans")
+    print(f"🏁 VALIDATION RESULT (Forward Walk)")
+    print(f"💰 Final Portfolio Value: {final_val:,.0f} Tomans")
     print(f"📈 Total Return (ROI): {roi:.2f}%")
     print("="*50)
 
     # و) رسم نمودار
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(12, 10))
 
     # 1. نمودار رشد سرمایه
     plt.subplot(2, 1, 1)
-    plt.plot(date_list[:len(portfolio_values)], portfolio_values, label='AI Portfolio', color='blue', linewidth=2)
-    plt.title(f'AI Performance (Forward Walk: {START_DATE_TEST} - Now)')
+    plt.plot(date_list[:len(portfolio_values)], portfolio_values, label='AI Portfolio (V6 Beta)', color='blue', linewidth=2)
+    plt.title(f'AI Performance (Validation: {START_DATE_TEST} - Now)')
     plt.ylabel('Value (Tomans)')
     plt.legend()
     plt.grid(True, alpha=0.3)
-    # خلوت کردن محور افقی
-    plt.xticks(np.arange(0, len(date_list), step=max(1, len(date_list)//10)), rotation=45)
+    
+    # تنظیم محور افقی
+    step_size = max(1, len(date_list)//10)
+    plt.xticks(np.arange(0, len(date_list), step=step_size), rotation=45)
 
     # 2. نمودار مدیریت نقدینگی
     plt.subplot(2, 1, 2)
@@ -176,8 +188,10 @@ if __name__ == "__main__":
     plt.title('Risk Management (Cash Position)')
     plt.ylabel('Cash Ratio (0-1)')
     plt.ylim(-0.05, 1.05)
-    plt.xticks(np.arange(0, len(date_list), step=max(1, len(date_list)//10)), rotation=45)
+    plt.xticks(np.arange(0, len(date_list), step=step_size), rotation=45)
     plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
+    plt.savefig("validation_v6_chart.png") # ذخیره خودکار نمودار
+    print("📸 Chart saved as 'validation_v6_chart.png'")
     plt.show()
